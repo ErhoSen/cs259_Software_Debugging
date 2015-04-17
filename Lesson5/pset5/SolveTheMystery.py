@@ -17,9 +17,9 @@ from pprint import pprint as pp
 # correlates the most with failure, fill in the following 3 variables,
 # Do NOT set these values dynamically.
 
-answer_function = "X"   # One of f1, f2, f3
-answer_bin = 42         # One of 1, 0, -1
-answer_value = 1.0000   # precision to 4 decimal places.
+answer_function = "f3"   # One of f1, f2, f3
+answer_bin = -1         # One of 1, 0, -1
+answer_value = 0.8165   # precision to 4 decimal places.
 
 # The buggy program
 def remove_html_markup(s):
@@ -50,12 +50,6 @@ coverage = {}
 def traceit(frame, event, arg):
     global coverage
 
-    # if event == "line":
-    #     filename = frame.f_code.co_filename
-    #     lineno   = frame.f_lineno
-    #     if not coverage.has_key(filename):
-    #         coverage[filename] = {}
-    #     coverage[filename][lineno] = True
     if event == "return":
         coverage[frame.f_code.co_name] = arg
 
@@ -68,21 +62,17 @@ def phi(n11, n10, n01, n00):
 
 # Print out values of phi, and result of runs for each covered line
 def print_tables(tables):
-    for filename in tables.keys():
-        lines = open(filename).readlines()
-        for i in range(23, 40): # lines of the remove_html_markup in this file
-            if tables[filename].has_key(i + 1):
-                (n11, n10, n01, n00) = tables[filename][i + 1]
-                try:
-                    factor = phi(n11, n10, n01, n00)
-                    prefix = "%+.4f%2d%2d%2d%2d" % (factor, n11, n10, n01, n00)
-                except:
-                    prefix = "       %2d%2d%2d%2d" % (n11, n10, n01, n00)
-                    
-            else:
-                prefix = "               "
-                    
-            print prefix, lines[i],
+    for func in tables:
+        for category, Ns in tables[func].iteritems():
+            n11, n10, n01, n00 = Ns
+
+            try:
+                factor = phi(n11, n10, n01, n00)
+                prefix = "%+.4f%2d%2d%2d%2d" % (factor, n11, n10, n01, n00)
+            except Exception as e:
+                prefix = "       %2d%2d%2d%2d" % (n11, n10, n01, n00)
+
+            print prefix, func, category
                             
 # Run the program with each test case and record 
 # input, outcome and coverage of lines
@@ -95,47 +85,61 @@ def run_tests(inputs):
         sys.settrace(traceit)
         result = mystery(input)
         sys.settrace(None)
-
-        # if result.find('<') == -1:
-        #     outcome = "PASS"
-        # else:
-        #     outcome = "FAIL"
-        
         runs.append((input, result, coverage))
     return runs
 
 # Create empty tuples for each covered line
 def init_tables(runs):
     tables = {}
-    for (input, outcome, coverage) in runs:
-        for filename, lines in coverage.iteritems():
-            for line in lines.keys():
-                if not tables.has_key(filename):
-                    tables[filename] = {}
-                if not tables[filename].has_key(line):
-                    tables[filename][line] = (0, 0, 0, 0)
+    for input, outcome, coverage in runs:
+        for func in coverage:
+            tables[func] = tables.get(func, {'positive': (0,0,0,0), 'zero': (0,0,0,0), 'negative': (0,0,0,0)})
 
     return tables
 
 # Compute n11, n10, etc. for each line
-def compute_n(tables):
-    for filename, lines in tables.iteritems():
-        for line in lines.keys():
-            (n11, n10, n01, n00) = tables[filename][line]
-            for (input, outcome, coverage) in runs:
-                if coverage.has_key(filename) and coverage[filename].has_key(line):
-                    # Covered in this run
-                    if outcome == "FAIL":
-                        n11 += 1  # covered and fails
-                    else:
-                        n10 += 1  # covered and passes
+def compute_n(tables, runs):
+    for input, outcome, coverage in runs:
+        for func, value in coverage.iteritems():
+            category = '' # 'positive' or 'zero' or "negative"
+            if isinstance(value, (int, float)):
+                if value > 0:
+                    category = 'positive'
+                elif value == 0:
+                    category = 'zero'
                 else:
-                    # Not covered in this run
-                    if outcome == "FAIL":
-                        n01 += 1  # uncovered and fails
+                    category = 'negative'
+
+            elif hasattr(value, '__len__'):
+                l = len(value)
+                if l > 0:
+                    category = 'positive'
+                else:
+                    category = 'zero'
+
+            elif value is True:
+                category = 'positive'
+            elif value is False:
+                category = 'negative'
+
+            else:
+                category = 'zero'
+
+            for tables_category in tables[func]:
+                n11, n10, n01, n00 = tables[func][tables_category]
+
+                if tables_category == category:
+                    if outcome == 'FAIL':
+                        n11 += 1
                     else:
-                        n00 += 1  # uncovered and passes
-            tables[filename][line] = (n11, n10, n01, n00)
+                        n10 += 1
+                else:
+                    if outcome == 'FAIL':
+                        n01 += 1
+                    else:
+                        n00 += 1
+
+                tables[func][tables_category] = (n11, n10, n01, n00)
     return tables
             
 ###### MYSTERY FUNCTION
@@ -212,10 +216,11 @@ def f3(mn):
 #           '""',
 #           "<p>"]
 runs = run_tests(inputs)
-pp(runs)
-print "#########"
+# pp(runs)
+# print "#########"
 tables = init_tables(runs)
-tables = compute_n(tables)
-#pp(tables)
+# pp(tables)
+tables = compute_n(tables, runs)
+# pp(tables)
 
-# print_tables(tables)
+print_tables(tables)
